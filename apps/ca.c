@@ -709,6 +709,7 @@ end_of_options:
                        i + 1);
             goto end;
         }
+		/////////////////////////////////////////////////////////////////check time value
         if ((pp[DB_type][0] == DB_TYPE_REV) &&
             !make_revoked(NULL, pp[DB_rev_date])) {
             BIO_printf(bio_err, " in entry %d\n", i + 1);
@@ -718,6 +719,7 @@ end_of_options:
             BIO_printf(bio_err, "entry %d: invalid expiry date\n", i + 1);
             goto end;
         }
+		////////////////////////////////////////////////////////////////check serial number
         p = pp[DB_serial];
         j = strlen(p);
         if (*p == '-') {
@@ -737,6 +739,7 @@ end_of_options:
                 goto end;
             }
         }
+		/////////////////////////////////////////////////////////////////////////////////
     }
     if (verbose) {
         TXT_DB_write(bio_out, db->db);
@@ -1709,7 +1712,7 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
                        "      check the database/serial_file for corruption\n");
         }
     }
-
+	//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     if (rrow != NULL) {
         BIO_printf(bio_err, "The matching entry has the following details\n");
         if (rrow[DB_type][0] == 'E')
@@ -1957,6 +1960,7 @@ static void write_new_certificate(BIO *bp, X509 *x, int output_der,
     PEM_write_bio_X509(bp, x);
 }
 
+// spkac = Signed Public Key and Callenge, it is a format for sending a certification signing request; it encodes a public key 
 static int certify_spkac(X509 **xret, char *infile, EVP_PKEY *pkey,
                          X509 *x509, const EVP_MD *dgst,
                          STACK_OF(OPENSSL_STRING) *sigopts,
@@ -2108,7 +2112,7 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
 
     for (i = 0; i < DB_NUMBER; i++)
         row[i] = NULL;
-    row[DB_name] = X509_NAME_oneline(X509_get_subject_name(x509), NULL, 0);	// export x509 format of name of text
+    row[DB_name] = X509_NAME_oneline(X509_get_subject_name(x509), NULL, 0);	// export x509 format of name to row[DB_name]
 
 
 	/*
@@ -2117,12 +2121,9 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
 		DB_rev_date     2
 		DB_serial       3     
 		DB_file         4
-		DB_name         5     
+		DB_name         5      
 		DB_NUMBER       6
 	*/
-
-
-
 
 
     bn = ASN1_INTEGER_to_BN(X509_get_serialNumber(x509), NULL); // export serial number(integer) and change it to BIGNUM and then let it 'bn'.
@@ -2133,6 +2134,7 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
     else
         row[DB_serial] = BN_bn2hex(bn); //  BIG NUM to Hex
     BN_free(bn);						// memory of bn free 
+
     if ((row[DB_name] == NULL) || (row[DB_serial] == NULL)) {
         BIO_printf(bio_err, "Memory allocation failure\n");    // exception
         goto end;
@@ -2142,18 +2144,18 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
      * certs
      */
     rrow = TXT_DB_get_by_index(db->db, DB_serial, row);
-    if (rrow == NULL) {					// if there is no serial number,
+    if (rrow == NULL) {				
         BIO_printf(bio_err,
                    "Adding Entry with serial number %s to DB for %s\n",
                    row[DB_serial], row[DB_name]);
 
         /* We now just add it to the database */   
-        row[DB_type] = OPENSSL_strdup("V");
+        row[DB_type] = OPENSSL_strdup("V");   // DB_type = valid
         tm = X509_get_notAfter(x509);
         row[DB_exp_date] = app_malloc(tm->length + 1, "row exp_data"); 
         memcpy(row[DB_exp_date], tm->data, tm->length); 
         row[DB_exp_date][tm->length] = '\0';
-        row[DB_rev_date] = NULL;
+        row[DB_rev_date] = NULL;				
         row[DB_file] = OPENSSL_strdup("unknown");
 
         irow = app_malloc(sizeof(*irow) * (DB_NUMBER + 1), "row ptr");
@@ -2169,11 +2171,14 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
             goto end;    // exception
         }
 
-        /* Revoke Certificate */
-        if (type == -1)
+		/////////////////////////////////////// For now on, if there is no index of DB_serial number in DB, then add some information of 'row'(type, serial, expired date, rec date....) to DB
+        
+		
+		/* Revoke Certificate */
+        if (type == -1)						
             ok = 1;
-        else 
-            ok = do_revoke(x509, db, type, value);
+        else								
+            ok = do_revoke(x509, db, type, value);	
 
         goto end;
 
@@ -2181,18 +2186,18 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
 	
 	
 	
-	  else if (index_name_cmp_noconst(row, rrow)) {
+	else if (index_name_cmp_noconst(row, rrow)) {
         BIO_printf(bio_err, "ERROR:name does not match %s\n", row[DB_name]);
         goto end;
-    } else if (type == -1) {
+    }else if (type == -1) {													
         BIO_printf(bio_err, "ERROR:Already present, serial number %s\n",
                    row[DB_serial]);
         goto end;
-    } else if (rrow[DB_type][0] == 'R') {
-        BIO_printf(bio_err, "ERROR:Already revoked, serial number %s\n",
+    }else if (rrow[DB_type][0] == 'R') {
+        BIO_printf(bio_err, "ERROR:Already revoked, serial number %s\n",		
                    row[DB_serial]);
         goto end;
-    } else {
+    }else {
         BIO_printf(bio_err, "Revoking Certificate %s.\n", rrow[DB_serial]);
         rev_str = make_revocation_str(type, value);
         if (!rev_str) {
@@ -2231,11 +2236,11 @@ static int get_certificate_status(const char *serial, CA_DB *db)
 
         /* Copy String from serial to row[DB_serial] */
         memcpy(row[DB_serial] + 1, serial, strlen(serial));
-        row[DB_serial][strlen(serial) + 1] = '\0';
+        row[DB_serial][strlen(serial) + 1] = '\0';		// if length of DB_Serial is odd, then set the front for 0 and last for NULL 
     } else {
         /* Copy String from serial to row[DB_serial] */
         memcpy(row[DB_serial], serial, strlen(serial));
-        row[DB_serial][strlen(serial)] = '\0';
+        row[DB_serial][strlen(serial)] = '\0';			// if length of DB_serial is even, then set the last for NULL
     }
 
     /* Make it Upper Case */
@@ -2244,7 +2249,7 @@ static int get_certificate_status(const char *serial, CA_DB *db)
 
     ok = 1;
 
-    /* Search for the certificate */
+    /* Search for the certificate */ /* in DB, Classify certificate for DB_type */
     rrow = TXT_DB_get_by_index(db->db, DB_serial, row);
     if (rrow == NULL) {
         BIO_printf(bio_err, "Serial %s not present in db.\n", row[DB_serial]);
@@ -2280,6 +2285,23 @@ static int get_certificate_status(const char *serial, CA_DB *db)
 
 static int do_updatedb(CA_DB *db)
 {
+
+
+	/*
+	typedef struct ca_db_st 
+	{
+		DB_ATTR attributes;
+		TXT_DB *db;
+	} CA_DB;
+
+			typedef struct db_attr_st 
+			{
+				int unique_subject;
+			} DB_ATTR;
+
+	*/
+
+
     ASN1_UTCTIME *a_tm = NULL;
     int i, cnt = 0;
     int db_y2k, a_y2k;          /* flags = 1 if y >= 2000 */
@@ -2291,12 +2313,12 @@ static int do_updatedb(CA_DB *db)
 
     /* get actual time and make a string */
     a_tm = X509_gmtime_adj(a_tm, 0);
-    a_tm_s = (char *)app_malloc(a_tm->length + 1, "time string");
+    a_tm_s = (char *)app_malloc(a_tm->length + 1, "time string");  // malloc
 
     memcpy(a_tm_s, a_tm->data, a_tm->length);
     a_tm_s[a_tm->length] = '\0';
 
-    if (strncmp(a_tm_s, "49", 2) <= 0)
+    if (strncmp(a_tm_s, "49", 2) <= 0) // compare string1 = a_tm_s and 2 = "49" with length '2', 
         a_y2k = 1;
     else
         a_y2k = 0;
@@ -2306,6 +2328,21 @@ static int do_updatedb(CA_DB *db)
 
         if (rrow[DB_type][0] == 'V') {
             /* ignore entries that are not valid */
+
+			/*
+			db_y2k is set to 1 if the year part of the date-entry in index.
+			txt is less or equal 49, otherwise db_y2k is set to 0.
+			Same for a_y2k and the actual date. This implies that 00,01,...,49 are 20xx-years. 
+
+			Then db_y2k and a_y2k will be compared:
+
+			db_y2k > a_y2k => cert is valid
+			db_y2k < a_y2k => cert is not valid
+			db_y2k = a_y2k => The dates lay in the same interval. Now it is save to 
+                    use the standard "strcmp()"-function to compare the 
+                    the date-entry in index.txt and the actual date. 
+			*/
+
             if (strncmp(rrow[DB_exp_date], "49", 2) <= 0)
                 db_y2k = 1;
             else
@@ -2313,7 +2350,7 @@ static int do_updatedb(CA_DB *db)
 
             if (db_y2k == a_y2k) {
                 /* all on the same y2k side */
-                if (strcmp(rrow[DB_exp_date], a_tm_s) <= 0) {
+                if (strcmp(rrow[DB_exp_date], a_tm_s) <= 0) {  // strcmp(compare string1, compare string2) and if string1 == string2, then return 0
                     rrow[DB_type][0] = 'E';
                     rrow[DB_type][1] = '\0';
                     cnt++;
@@ -2336,7 +2373,7 @@ static int do_updatedb(CA_DB *db)
     return (cnt);
 }
 
-static const char *crl_reasons[] = {
+static const char *crl_reasons[] = { 
     /* CRL reason strings */
     "unspecified",
     "keyCompromise",
@@ -2361,7 +2398,7 @@ static const char *crl_reasons[] = {
  * additional argument
  */
 
-char *make_revocation_str(int rev_type, char *rev_arg)
+char *make_revocation_str(int rev_type, char *rev_arg)					// setting reason -> string
 {
     char *other = NULL, *str;
     const char *reason = NULL;
@@ -2372,6 +2409,7 @@ char *make_revocation_str(int rev_type, char *rev_arg)
     case REV_NONE:
         break;
 
+	///////////////////////////////////////////////////////////////////////revocation reason
     case REV_CRL_REASON:
         for (i = 0; i < 8; i++) {
             if (strcasecmp(rev_arg, crl_reasons[i]) == 0) {
@@ -2456,7 +2494,19 @@ char *make_revocation_str(int rev_type, char *rev_arg)
 
 int make_revoked(X509_REVOKED *rev, const char *str)
 {
+	/*
+	typedef struct X509_revoked_st
+	{
+	ASN1_INTEGER *serialNumber;
+	ASN1_TIME *revocationDate;
+	STACK_OF(X509_EXTENSION) *extensions;
+	int sequence;
+	} X509_REVOKED;
+	*/
+
+
     char *tmp = NULL;
+
     int reason_code = -1;
     int i, ret = 0;
     ASN1_OBJECT *hold = NULL;
@@ -2470,10 +2520,10 @@ int make_revoked(X509_REVOKED *rev, const char *str)
     if (i == 0)
         goto end;
 
-    if (rev && !X509_REVOKED_set_revocationDate(rev, revDate))
+    if (rev && !X509_REVOKED_set_revocationDate(rev, revDate))				// rev AND revDate = 1 -> ret = 0
         goto end;
 
-    if (rev && (reason_code != OCSP_REVOKED_STATUS_NOSTATUS)) {
+    if (rev && (reason_code != OCSP_REVOKED_STATUS_NOSTATUS)) {				//
         rtmp = ASN1_ENUMERATED_new();
         if (rtmp == NULL || !ASN1_ENUMERATED_set(rtmp, reason_code))
             goto end;
@@ -2590,6 +2640,8 @@ int unpack_revinfo(ASN1_TIME **prevtm, int *preason, ASN1_OBJECT **phold,
             goto end;
         }
     }
+
+	////////////////////////////////////////////////////////////////////////////revocation reason code
     if (reason_str) {
         for (i = 0; i < NUM_REASONS; i++) {
             if (strcasecmp(reason_str, crl_reasons[i]) == 0) {
